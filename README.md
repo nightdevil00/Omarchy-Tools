@@ -30,4 +30,18 @@
   numerous 32-bit and 64-bit libraries essential for graphics, audio, and general system compatibility in a gaming
   environment.
 
-  
+  4. The sudo.sh script is a Bash script that modifies the system's /etc/sudoers file. Its primary function is to grant
+  the user who executes the script passwordless sudo access specifically for running the pacman package manager
+  command.
+
+  Technically, the script performs the following steps:
+   -. Backup: It creates a backup of the existing /etc/sudoers file, saving it as /etc/sudoers.bak.
+   -. Conditional Modification: It checks if the line "$USER ALL=(ALL) NOPASSWD: /usr/bin/pacman" already exists in
+      /etc/sudoers. If this specific entry is not found, the script appends it to the file. This configuration allows the
+      user who runs the script to execute pacman commands with sudo without being prompted for a password.
+   -. Syntax Validation: After potentially modifying the sudoers file, it runs sudo visudo -c to perform a syntax check.
+      This is a critical step to ensure that the changes haven't introduced any errors that could break sudo
+      functionality.
+  -. Rollback on Error: If the visudo -c command indicates a syntax error, the script automatically restores the
+      /etc/sudoers file from the previously created backup (/etc/sudoers.bak), preventing potential system lockout or
+      sudo malfunctions.
