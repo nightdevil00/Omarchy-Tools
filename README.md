@@ -45,7 +45,8 @@
   -. Rollback on Error: If the visudo -c command indicates a syntax error, the script automatically restores the
       /etc/sudoers file from the previously created backup (/etc/sudoers.bak), preventing potential system lockout or
       sudo malfunctions.
-5. Install AUR Pkgs from GITHUB Mirror: -Download the script and make it executable with chmod +x
+      
+   5. Install AUR Pkgs from GITHUB Mirror: -Download the script and make it executable with chmod +x
    Navigate to your home directory or where the script is located.
    Run the script with the name of the package you want to install.
   For example, to install the package btop: ./aur-install.sh btopp .The script will then download, build, and install the package. 
