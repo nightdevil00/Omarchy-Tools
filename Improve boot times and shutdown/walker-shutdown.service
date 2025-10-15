@@ -1,0 +1,12 @@
+[Unit]
+Description=Gracefully shutdown walker app
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pkill walker
+RemainAfterExit=true
+
+[Install]
+WantedBy=shutdown.target reboot.target halt.target
