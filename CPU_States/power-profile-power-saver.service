@@ -1,0 +1,9 @@
+[Unit]
+Description=Set power profile to power-saver
+
+[Service]
+ExecStart=/usr/bin/powerprofilesctl set power-saver
+Type=oneshot
+
+[Install]
+WantedBy=default.target

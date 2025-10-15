@@ -1,0 +1,9 @@
+[Unit]
+Description=Set power profile to balanced
+
+[Service]
+ExecStart=/usr/bin/powerprofilesctl set balanced
+Type=oneshot
+
+[Install]
+WantedBy=default.target
