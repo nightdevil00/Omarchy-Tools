@@ -51,3 +51,5 @@
    Run the script with the name of the package you want to install.
   For example, to install the package btop: ./aur-install.sh btopp .The script will then download, build, and install the package. 
   Since package installation requires root privileges, you will be prompted to enter your sudo password during the final step.
+
+ 6. Set editor - allows for easier setting up the default editor for known text file format
