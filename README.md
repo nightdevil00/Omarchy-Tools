@@ -53,3 +53,6 @@
   Since package installation requires root privileges, you will be prompted to enter your sudo password during the final step.
 
  6. Set editor - allows for easier setting up the default editor for known text file format
+
+<img width="643" height="429" alt="image" src="https://github.com/user-attachments/assets/23499507-9350-4091-a8b4-d91cbbb7bc91" />
+
