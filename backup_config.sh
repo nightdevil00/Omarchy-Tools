@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Backup script for Hyprland, Omarchy, and installed packages
-# Author: Generated backup script
+# Author: nightdevil00
 # Date: $(date +%Y-%m-%d)
 
 set -e
