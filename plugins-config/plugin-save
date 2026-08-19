@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# omarchy:summary=Save and restore plugin configuration
+# omarchy:group=plugin
+# omarchy:args=save|restore [file]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_FILE="$SCRIPT_DIR/plugins.save"
+SHELL_JSON="$HOME/.config/omarchy/shell.json"
+PLUGINS_DIR="$HOME/.config/omarchy/plugins"
+
+fail() {
+  echo "plugin-save: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: plugin-save save [file]
+       plugin-save restore [file]
+
+Save current plugin configuration (layout positions + git URLs) to a file,
+or restore plugins from a previously saved file.
+
+If no file is given, defaults to plugins.save in the same directory as this script.
+
+Examples:
+  plugin-save save
+  plugin-save save ~/backup/plugins.save
+  plugin-save restore ~/usb/plugins.save
+EOF
+  exit 0
+}
+
+cmd_save() {
+  local outfile="${1:-$DEFAULT_FILE}"
+
+  [[ -f "$SHELL_JSON" ]] || fail "shell.json not found at $SHELL_JSON"
+
+  jq -n --slurpfile shell "$SHELL_JSON" '
+    {
+      version: 1,
+      saved_at: (now | todate),
+      bar_layout: ($shell[0].bar.layout // {}),
+      bar_position: ($shell[0].bar.position // "top"),
+      center_anchor: ($shell[0].bar.centerAnchor // ""),
+      plugins_section: ($shell[0].plugins // []),
+      bar_transparent: ($shell[0].bar.transparent // false),
+      plugins: []
+    }
+  ' > "$outfile"
+
+  local plugin_ids
+  plugin_ids=$(jq -r '
+    (.bar_layout.left // [])[].id,
+    (.bar_layout.center // [])[].id,
+    (.bar_layout.right // [])[].id,
+    (.plugins_section // [])[].id
+  ' "$outfile" | sort -u)
+
+  local tmpfile
+  tmpfile=$(mktemp)
+
+  while IFS= read -r id; do
+    [[ -n $id ]] || continue
+    local dir="$PLUGINS_DIR/$id"
+    local git_url=""
+    local is_first_party=false
+
+    if [[ -d "$dir" ]]; then
+      git_url=$(git -C "$dir" remote get-url origin 2>/dev/null || echo "")
+    fi
+
+    if [[ -z $git_url ]]; then
+      is_first_party=true
+    fi
+
+    local section=""
+    local index=""
+    section=$(jq -r --arg id "$id" '
+      if (.bar_layout.left // []) | map(.id) | index($id) then "left"
+      elif (.bar_layout.center // []) | map(.id) | index($id) then "center"
+      elif (.bar_layout.right // []) | map(.id) | index($id) then "right"
+      else ""
+      end
+    ' "$outfile")
+
+    if [[ -n $section ]]; then
+      index=$(jq -r --arg id "$id" --arg sec "$section" '
+        (.bar_layout[$sec] // []) | to_entries[] | select(.value.id == $id) | .key
+      ' "$outfile")
+    else
+      index=""
+    fi
+
+    jq --arg id "$id" \
+       --arg git "$git_url" \
+       --arg first "$is_first_party" \
+       --arg sec "$section" \
+       --arg idx "$index" \
+      '.plugins += [{
+        id: $id,
+        git_url: $git,
+        first_party: ($first == "true"),
+        section: $sec,
+        index: (if $idx == "" or $idx == "null" then null else ($idx | tonumber) end)
+      }]' "$outfile" > "$tmpfile"
+    mv "$tmpfile" "$outfile"
+  done <<< "$plugin_ids"
+
+  jq '{
+    version: .version,
+    saved_at: .saved_at,
+    bar_position: .bar_position,
+    bar_transparent: .bar_transparent,
+    center_anchor: .center_anchor,
+    bar_layout: .bar_layout,
+    plugins_section: .plugins_section,
+    plugins: .plugins
+  }' "$outfile" > "$tmpfile"
+  mv "$tmpfile" "$outfile"
+
+  echo "Saved to $outfile"
+}
+
+cmd_restore() {
+  local infile="${1:-$DEFAULT_FILE}"
+  [[ -f "$infile" ]] || fail "file not found: $infile"
+
+  echo "Restoring from $infile ..."
+
+  local third_party
+  third_party=$(jq -r '.plugins[] | select(.first_party == false and .git_url != "") | .git_url' "$infile")
+
+  while IFS= read -r git_url; do
+    [[ -n $git_url ]] || continue
+    echo "Adding $git_url ..."
+    omarchy plugin add "$git_url" --yes 2>&1 || {
+      echo "Warning: failed to add $git_url, skipping" >&2
+    }
+  done <<< "$third_party"
+
+  local placements
+  placements=$(jq -r '
+    .plugins[] |
+    select(.section != "" and .section != null) |
+    "\(.id)\t\(.section)\t\(.index // "")"
+  ' "$infile")
+
+  while IFS=$'\t' read -r id section index; do
+    [[ -n $id ]] || continue
+    local args=("$id")
+    if [[ -n $section ]]; then
+      args+=(--section "$section")
+    fi
+    if [[ -n $index && "$index" != "null" ]]; then
+      args+=(--index "$index")
+    fi
+    echo "Placing $id in $section (index: ${index:-auto}) ..."
+    omarchy plugin enable "${args[@]}" 2>&1 || {
+      echo "Warning: failed to place $id, skipping" >&2
+    }
+  done <<< "$placements"
+
+  local layout plugins_section bar_position bar_transparent center_anchor
+  layout=$(jq '.bar_layout' "$infile")
+  plugins_section=$(jq '.plugins_section' "$infile")
+  bar_position=$(jq -r '.bar_position // "top"' "$infile")
+  bar_transparent=$(jq -r '.bar_transparent // false' "$infile")
+  center_anchor=$(jq -r '.center_anchor // ""' "$infile")
+
+  jq --argjson layout "$layout" \
+     --argjson plugins "$plugins_section" \
+     --arg pos "$bar_position" \
+     --argjson trans "$bar_transparent" \
+     --arg anchor "$center_anchor" \
+    '.bar.layout = $layout | .bar.position = $pos | .bar.transparent = $trans | .bar.centerAnchor = $anchor | .plugins = $plugins' \
+    "$SHELL_JSON" > "${SHELL_JSON}.tmp"
+  mv "${SHELL_JSON}.tmp" "$SHELL_JSON"
+
+  echo "Done. Shell will hot-reload automatically."
+}
+
+case "${1:-}" in
+  save)
+    shift
+    cmd_save "${1:-}"
+    ;;
+  restore)
+    shift
+    cmd_restore "${1:-}"
+    ;;
+  -h | --help | help)
+    usage
+    ;;
+  *)
+    usage
+    ;;
+esac

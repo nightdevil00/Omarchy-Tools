@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "saved_at": "2026-08-19T21:56:06Z",
+  "bar_position": "top",
+  "bar_transparent": false,
+  "center_anchor": "omarchy.clock",
+  "bar_layout": {
+    "left": [
+      {
+        "id": "omarchy.menu"
+      },
+      {
+        "id": "omarchy.workspaces"
+      }
+    ],
+    "center": [
+      {
+        "id": "omarchy.indicators"
+      },
+      {
+        "id": "omarchy.clock",
+        "format": "dddd HH:mm",
+        "formatAlt": "d MMMM 'W'ww yyyy",
+        "verticalFormat": "HH\n—\nmm"
+      },
+      {
+        "id": "omarchy.keyboard-layout"
+      },
+      {
+        "id": "omarchy.weather"
+      },
+      {
+        "id": "pick.screenshot"
+      },
+      {
+        "id": "io.github.gardnmi.window-shelf"
+      },
+      {
+        "id": "omarchy.system-update"
+      }
+    ],
+    "right": [
+      {
+        "id": "omarchy.tray"
+      },
+      {
+        "id": "com.user.now-playing"
+      },
+      {
+        "id": "bt.codecs"
+      },
+      {
+        "id": "akshar.radio-atlas"
+      },
+      {
+        "id": "io.github.devdussey.search-bar"
+      },
+      {
+        "id": "io.github.bwest8.open-apps"
+      },
+      {
+        "id": "io.github.odessa2.bing-wallpaper",
+        "market": "global",
+        "setWallpaper": false
+      },
+      {
+        "id": "omarchy.agents"
+      },
+      {
+        "id": "omarchy.bluetooth"
+      },
+      {
+        "id": "omarchy.network"
+      },
+      {
+        "id": "omarchy.audio"
+      },
+      {
+        "id": "omarchy.monitor"
+      },
+      {
+        "id": "omarchy.power"
+      }
+    ]
+  },
+  "plugins_section": [
+    {
+      "id": "tenzin.live-wallpaper"
+    },
+    {
+      "id": "io.github.sirmenef.workspace-overview"
+    },
+    {
+      "id": "simple.dock"
+    },
+    {
+      "id": "taxin.cursor-style"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "akshar.radio-atlas",
+      "git_url": "https://github.com/AksharP5/omarchy-radio-atlas.git",
+      "first_party": false,
+      "section": "right",
+      "index": 3
+    },
+    {
+      "id": "bt.codecs",
+      "git_url": "https://github.com/nightdevil00/bt.codecs.git",
+      "first_party": false,
+      "section": "right",
+      "index": 2
+    },
+    {
+      "id": "com.user.now-playing",
+      "git_url": "https://github.com/Deoxizn/now-playing",
+      "first_party": false,
+      "section": "right",
+      "index": 1
+    },
+    {
+      "id": "io.github.bwest8.open-apps",
+      "git_url": "https://github.com/Bwest8/omarchy-open-apps.git",
+      "first_party": false,
+      "section": "right",
+      "index": 5
+    },
+    {
+      "id": "io.github.devdussey.search-bar",
+      "git_url": "https://github.com/devdussey/omarchy-search-bar.git",
+      "first_party": false,
+      "section": "right",
+      "index": 4
+    },
+    {
+      "id": "io.github.gardnmi.window-shelf",
+      "git_url": "https://github.com/gardnmi/omarchy-minimize.git",
+      "first_party": false,
+      "section": "center",
+      "index": 5
+    },
+    {
+      "id": "io.github.odessa2.bing-wallpaper",
+      "git_url": "https://github.com/odessa2/bing-wallpaper-for-omarchy.git",
+      "first_party": false,
+      "section": "right",
+      "index": 6
+    },
+    {
+      "id": "io.github.sirmenef.workspace-overview",
+      "git_url": "https://github.com/sirmenef/omarchy-workspace-overview.git",
+      "first_party": false,
+      "section": "",
+      "index": null
+    },
+    {
+      "id": "omarchy.agents",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 7
+    },
+    {
+      "id": "omarchy.audio",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 10
+    },
+    {
+      "id": "omarchy.bluetooth",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 8
+    },
+    {
+      "id": "omarchy.clock",
+      "git_url": "",
+      "first_party": true,
+      "section": "center",
+      "index": 1
+    },
+    {
+      "id": "omarchy.indicators",
+      "git_url": "",
+      "first_party": true,
+      "section": "center",
+      "index": 0
+    },
+    {
+      "id": "omarchy.keyboard-layout",
+      "git_url": "",
+      "first_party": true,
+      "section": "center",
+      "index": 2
+    },
+    {
+      "id": "omarchy.menu",
+      "git_url": "",
+      "first_party": true,
+      "section": "left",
+      "index": 0
+    },
+    {
+      "id": "omarchy.monitor",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 11
+    },
+    {
+      "id": "omarchy.network",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 9
+    },
+    {
+      "id": "omarchy.power",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 12
+    },
+    {
+      "id": "omarchy.system-update",
+      "git_url": "",
+      "first_party": true,
+      "section": "center",
+      "index": 6
+    },
+    {
+      "id": "omarchy.tray",
+      "git_url": "",
+      "first_party": true,
+      "section": "right",
+      "index": 0
+    },
+    {
+      "id": "omarchy.weather",
+      "git_url": "",
+      "first_party": true,
+      "section": "center",
+      "index": 3
+    },
+    {
+      "id": "omarchy.workspaces",
+      "git_url": "",
+      "first_party": true,
+      "section": "left",
+      "index": 1
+    },
+    {
+      "id": "pick.screenshot",
+      "git_url": "https://github.com/nightdevil00/pick.screenshot.git",
+      "first_party": false,
+      "section": "center",
+      "index": 4
+    },
+    {
+      "id": "simple.dock",
+      "git_url": "https://github.com/nightdevil00/simple.dock.git",
+      "first_party": false,
+      "section": "",
+      "index": null
+    },
+    {
+      "id": "taxin.cursor-style",
+      "git_url": "https://github.com/taxin-404/oma-cursor-style.git",
+      "first_party": false,
+      "section": "",
+      "index": null
+    },
+    {
+      "id": "tenzin.live-wallpaper",
+      "git_url": "https://github.com/yesheytenzin/live-wallpaper.git",
+      "first_party": false,
+      "section": "",
+      "index": null
+    }
+  ]
+}
