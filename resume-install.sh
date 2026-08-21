@@ -30,23 +30,29 @@ if [[ -z $USER_NAME ]] || ! grep -q "^${USER_NAME}:" "$MNT/etc/passwd"; then
 fi
 echo "Install user: $USER_NAME"
 
-echo "[1/3] Patching fix-synaptic-touchpad.sh to be non-fatal..."
+echo "[1/4] Patching fix-synaptic-touchpad.sh to be non-fatal..."
 if grep -q '|| true' "$TOUCHPAD_FIX" 2>/dev/null; then
   echo "      already patched"
 else
   sed -i 's|^\(\s*modprobe psmouse synaptics_intertouch=1\)$|\1 2>/dev/null \|\| true|' "$TOUCHPAD_FIX"
 fi
 
-echo "[2/3] Checking network..."
+echo "[2/4] Checking network..."
 if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
   echo "      online - restoring online pacman mirrors (works around missing offline vulkan packages)"
   cp -f "$MNT/usr/share/omarchy/default/pacman/pacman-stable.conf" "$MNT/etc/pacman.conf"
   cp -f "$MNT/usr/share/omarchy/default/pacman/mirrorlist-stable" "$MNT/etc/pacman.d/mirrorlist"
+  if grep -q '^\[offline\]' "$MNT/etc/pacman.conf"; then
+    echo "Error: [offline] repo still present in $MNT/etc/pacman.conf after restore" >&2
+    exit 1
+  fi
+  echo "      refreshing package databases (stale offline dbs cause 404s on version-pinned packages)"
+  arch-chroot "$MNT" pacman -Sy
 else
   echo "      offline - leaving offline mirror config untouched"
 fi
 
-echo "[3/3] Re-running system finalizer (this can take a while)..."
+echo "[3/4] Re-running system finalizer (this can take a while)..."
 START_EPOCH=$(date +%s)
 arch-chroot "$MNT" env --unset=XDG_RUNTIME_DIR \
   OMARCHY_PATH=/usr/share/omarchy \
