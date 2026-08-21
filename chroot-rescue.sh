@@ -1,7 +1,6 @@
 #!/bin/bash
-# Interactive rescue: unlock LUKS, mount the Omarchy btrfs layout, arch-chroot.
-# Run as root from the live ISO. Optional args are executed inside the chroot,
-# e.g.: ./chroot-rescue.sh mkinitcpio -P
+# Interactive rescue: pick disk -> pick LUKS partition -> unlock -> mount btrfs
+# layout + ESP -> arch-chroot (mkinitcpio -P). Run as root from the live ISO.
 
 set -euo pipefail
 
@@ -14,6 +13,7 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 choose() {
   local title=$1; shift
+  echo ""
   echo "$title"
   if [[ -n $GUM ]]; then
     gum choose "${@}"
@@ -34,38 +34,77 @@ confirm() {
   fi
 }
 
-mapfile -t LUKS_PARTS < <(lsblk -rno PATH,TYPE | awk '$2=="crypto_LUKS"{print $1}')
-(( ${#LUKS_PARTS[@]} > 0 )) || die "no LUKS partitions found (already unlocked? booting the wrong media?)"
+pick_from() {
+  local title=$1 prefix=$2
+  shift 2
+  local sel
+  sel=$(choose "$title" "${@}")
+  echo "${sel#$prefix}"
+}
+
+echo "== Omarchy rescue chroot =="
 
 if [[ -e /dev/mapper/$MAPPER ]] && confirm "/dev/mapper/$MAPPER already exists - reuse it?"; then
-  PART="(already open)"
+  ROOT_SRC="/dev/mapper/$MAPPER"
 else
-  if (( ${#LUKS_PARTS[@]} == 1 )); then
-    PART=${LUKS_PARTS[0]}
-    confirm "Unlock $PART as /dev/mapper/$MAPPER?" || die "aborted"
+  mapfile -t DISKS < <(lsblk -drno PATH,SIZE,MODEL | awk '$1 ~ /^\/dev\/(sd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$/ {print $1"  "$2"  "$3}')
+  (( ${#DISKS[@]} > 0 )) || die "no disks found"
+  SEL=$(choose "Step 1/6: select the disk Omarchy was installed to" "${DISKS[@]}")
+  DISK=$(echo "$SEL" | awk '{print $1}')
+
+  mapfile -t PARTS < <(lsblk -rno PATH,SIZE,FSTYPE,PARTTYPENAME "$DISK" | awk '$3 != "" {print $1"  "$2"  "$3"  "$4}')
+  (( ${#PARTS[@]} > 0 )) || die "no partitions found on $DISK"
+
+  LUKS_GUESS=$(lsblk -rno PATH,FSTYPE "$DISK" | awk '$2=="crypto_LUKS"{print $1}' | head -n1)
+  PROMPT="Step 2/6: select the LUKS2 partition containing Omarchy"
+  [[ -n $LUKS_GUESS ]] && PROMPT+=" (likely $LUKS_GUESS)"
+  SEL=$(choose "$PROMPT" "${PARTS[@]}")
+  PART=$(echo "$SEL" | awk '{print $1}')
+
+  FSTYPE=$(lsblk -rno FSTYPE "$PART")
+  if [[ $FSTYPE == crypto_LUKS ]]; then
+    confirm "Step 3/6: decrypt $PART?"
+  elif confirm "$PART is $FSTYPE, not LUKS. Mount it as an unencrypted btrfs root?"; then
+    ROOT_SRC="$PART"
   else
-    PART=$(choose "Multiple LUKS partitions found - which one?" "${LUKS_PARTS[@]}")
+    die "aborted"
   fi
-  [[ -e /dev/mapper/$MAPPER ]] || cryptsetup open "$PART" "$MAPPER"
+
+  if [[ -z ${ROOT_SRC:-} ]]; then
+    while :; do
+      echo ""
+      read -rsp "Step 4/6: enter the LUKS passphrase for $PART: " PW
+      echo ""
+      if printf '%s' "$PW" | cryptsetup open "$PART" "$MAPPER" --key-file=- 2>/dev/null; then
+        unset PW
+        break
+      fi
+      unset PW
+      echo "Wrong passphrase or unlock failed, try again."
+      confirm "Retry?" || die "aborted"
+    done
+    ROOT_SRC="/dev/mapper/$MAPPER"
+  fi
 fi
 
-FSTYPE=$(lsblk -rno FSTYPE "/dev/mapper/$MAPPER" | head -n1)
-[[ $FSTYPE == btrfs ]] || die "/dev/mapper/$MAPPER is $FSTYPE, expected btrfs"
+FSTYPE=$(lsblk -rno FSTYPE "$ROOT_SRC" | head -n1)
+[[ $FSTYPE == btrfs ]] || die "$ROOT_SRC is $FSTYPE, expected btrfs"
 
 if mountpoint -q "$MNT"; then
   die "$MNT is already a mountpoint - unmount it first (umount -R $MNT)"
 fi
 [[ -e $MNT ]] || mkdir -p "$MNT"
 
-echo "Mounting root subvolume @ at $MNT..."
-mount -o subvol=@ "/dev/mapper/$MAPPER" "$MNT"
+echo ""
+echo "Step 5/6: mounting btrfs subvolumes..."
+mount -o subvol=@ "$ROOT_SRC" "$MNT"
 
 declare -A SUBVOLS=( [@home]=/home [@log]=/var/log [@pkg]=/var/cache/pacman/pkg )
 while IFS= read -r sv; do
   for name in "${!SUBVOLS[@]}"; do
     if [[ $sv == "$name" || $sv == "$name/"* ]]; then
       mkdir -p "$MNT${SUBVOLS[$name]}"
-      mount -o subvol="$name" "/dev/mapper/$MAPPER" "$MNT${SUBVOLS[$name]}"
+      mount -o subvol="$name" "$ROOT_SRC" "$MNT${SUBVOLS[$name]}"
     fi
   done
 done < <(btrfs subvolume list "$MNT" | awk '{print $NF}')
@@ -75,9 +114,10 @@ if [[ -n $ESP_SPEC ]]; then
   echo "Mounting ESP ($ESP_SPEC) at $MNT/boot..."
   mount "$ESP_SPEC" "$MNT/boot"
 else
-  mapfile -t EFIS < <(lsblk -rno PATH,FSTYPE,PARTTYPENAME | awk 'tolower($0) ~ /vfat|efi/ {print $1}')
-  if (( ${#EFIS[@]} > 0 )) && confirm "No /boot entry in fstab - pick an EFI partition to mount at $MNT/boot?"; then
-    ESP=$(choose "Which EFI partition?" "${EFIS[@]}")
+  mapfile -t EFIS < <(lsblk -rno PATH,FSTYPE,PARTTYPENAME | awk 'tolower($0) ~ /vfat|efi/ {print $1"  "$2"  "$3}')
+  if (( ${#EFIS[@]} > 0 )); then
+    SEL=$(choose "No /boot entry in fstab - select the EFI partition" "${EFIS[@]}")
+    ESP=$(echo "$SEL" | awk '{print $1}')
     mount "$ESP" "$MNT/boot"
   else
     echo "Warning: no ESP mounted - mkinitcpio/Limine work will fail without /boot"
@@ -89,16 +129,25 @@ echo "Mounted:"
 findmnt -R "$MNT" -o TARGET,SOURCE,FSTYPE
 echo ""
 
+ACTION=$(choose "Step 6/6: what now?" \
+  "Run mkinitcpio -P now" \
+  "Open a shell in the installed system" \
+  "Both (mkinitcpio -P, then shell)" \
+  "Nothing - just clean up")
+
 CHROOT_RC=0
-if (( $# > 0 )); then
-  arch-chroot "$MNT" "$@" || CHROOT_RC=$?
-else
-  echo "Dropping into the target. Useful now: mkinitcpio -P"
-  arch-chroot "$MNT" || CHROOT_RC=$?
-fi
+case "$ACTION" in
+  "Run mkinitcpio -P now") arch-chroot "$MNT" mkinitcpio -P || CHROOT_RC=$? ;;
+  "Open a shell in the installed system") arch-chroot "$MNT" || CHROOT_RC=$? ;;
+  "Both (mkinitcpio -P, then shell)")
+    arch-chroot "$MNT" mkinitcpio -P || CHROOT_RC=$?
+    (( CHROOT_RC == 0 )) && { echo ""; arch-chroot "$MNT" || CHROOT_RC=$?; }
+    ;;
+esac
+
 if confirm "Clean up (unmount everything and close LUKS)?"; then
   umount -R "$MNT" 2>/dev/null || true
-  cryptsetup close "$MAPPER" 2>/dev/null || true
+  [[ $ROOT_SRC == /dev/mapper/* ]] && cryptsetup close "$MAPPER" 2>/dev/null || true
   echo "Cleanup done."
 else
   echo "Leaving mounts in place at $MNT."
