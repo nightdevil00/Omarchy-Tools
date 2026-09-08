@@ -292,20 +292,22 @@ mount_boot_partitions() {
         esac
     done < <(lsblk -npr -o NAME,TYPE "$SELECTED_DISK" | awk '$2 == "part" { print $1 }')
 
-    if [[ -n "$efi_part" ]]; then
-        [[ ! -d "$MOUNT_POINT/boot/efi" ]] && mkdir -p "$MOUNT_POINT/boot/efi"
-        mount "$efi_part" "$MOUNT_POINT/boot/efi"
-        print_success "Mounted EFI partition: $efi_part"
-    else
-        print_warning "No EFI partition found, skipping."
-    fi
-
     if [[ -n "$boot_part" ]]; then
         [[ ! -d "$MOUNT_POINT/boot" ]] && mkdir -p "$MOUNT_POINT/boot"
         mount "$boot_part" "$MOUNT_POINT/boot"
         print_success "Mounted boot partition: $boot_part"
+
+        if [[ -n "$efi_part" ]]; then
+            [[ ! -d "$MOUNT_POINT/boot/efi" ]] && mkdir -p "$MOUNT_POINT/boot/efi"
+            mount "$efi_part" "$MOUNT_POINT/boot/efi"
+            print_success "Mounted EFI partition: $efi_part"
+        fi
+    elif [[ -n "$efi_part" ]]; then
+        [[ ! -d "$MOUNT_POINT/boot" ]] && mkdir -p "$MOUNT_POINT/boot"
+        mount "$efi_part" "$MOUNT_POINT/boot"
+        print_success "Mounted EFI partition as boot: $efi_part"
     else
-        print_status "No separate boot partition found, skipping."
+        print_warning "No boot or EFI partition found, skipping."
     fi
 }
 
