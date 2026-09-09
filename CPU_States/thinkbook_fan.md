@@ -167,7 +167,9 @@ ideapad_acpi VPC2004:00: DYTC_VERSION 4 support may not work. Pass ideapad_lapto
 ideapad_acpi VPC2004:00: DYTC interface is not available
 ```
 The kernel refuses to enable DYTC v4 on unconfirmed models unless opted in with
-`ideapad_laptop.allow_v4_dytc=Y`.
+`ideapad_laptop.allow_v4_dytc=Y`. 
+
+``` cmdline: root=UUID=b38e46df-1590-4ea9-9b60-f404156e4196 zswap.enabled=0 rootflags=subvol=@ ideapad_laptop.allow_v4_dytc=Y rw rootfstype=btrfs  resume=/dev/nvme1n1p6 resume_offset=1920693 initramfs_async=0 quiet splash loglevel=0 systemd.show_status=false rd.udev.log_>```
 
 ### Danger learned
 
