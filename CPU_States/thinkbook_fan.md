@@ -211,3 +211,17 @@ Fn+Q should then cycle the profiles through the driver.
 4. **GUI launch (for monitoring only)** — `sudo -E nbfc-qt` with the service running;
    `sudo` must preserve the display environment (`WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`),
    otherwise Qt fails with `qt.qpa.xcb: could not connect to display`.
+## autoprofile daemon (auto-switch DYTC profile by temp/load)
+
+/usr/local/sbin/autoprofile.sh + systemd unit `autoprofile.service` (enabled).
+Poll /sys/firmware/acpi/platform_profile every 5s vs coretemp Package + loadavg.
+
+Transitions (load = % of all cores, nproc-normalized):
+- balanced -> performance: temp>80C OR load>85%
+- performance -> balanced: load<40% OR temp<55C
+- balanced -> low-power:   temp<50C AND load<25%
+- low-power -> balanced:   temp>60C OR  load>50%
+
+Files: /usr/local/sbin/autoprofile.sh, /etc/systemd/system/autoprofile.service
+Control: systemctl {start,stop,restart,status} autoprofile
+Tune thresholds at top of script, then `sudo systemctl restart autoprofile`.
