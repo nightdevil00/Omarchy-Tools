@@ -13,6 +13,9 @@ dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/boo
 -- Load Omarchy defaults.
 require("default.hypr.omarchy")
 
+hl.env("LIBVA_DRIVER_NAME", "iHD")
+hl.env("NVD_BACKEND", "egl")
+
 -- Put your personal overrides in these files. They're loaded after Omarchy's
 -- defaults so package updates can improve the defaults without rewriting your
 -- ~/.config/hypr files.
@@ -21,6 +24,8 @@ require("hypr.input")
 require("hypr.bindings")
 require("hypr.looknfeel")
 require("hypr.autostart")
+require("hypr.animations")
+
 
 -- Toggle config flags dynamically.
 require("default.hypr.toggles")
