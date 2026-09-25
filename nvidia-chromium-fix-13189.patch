@@ -1,0 +1,274 @@
+diff --git a/bin/omarchy-install-browser b/bin/omarchy-install-browser
+index 4593bc72d87..7785f7375b4 100755
+--- a/bin/omarchy-install-browser
++++ b/bin/omarchy-install-browser
+@@ -7,6 +7,7 @@
+ set -e
+ 
+ source "$OMARCHY_PATH/install/helpers/browser-policy.sh"
++source "$OMARCHY_PATH/install/helpers/chromium-video-decode.sh"
+ 
+ setup_chromium_policy_directory() {
+   browser_policy_setup_dir "$1"
+@@ -20,6 +21,7 @@ announce_browser_installed() {
+ copy_chromium_flags() {
+   mkdir -p ~/.config
+   cp -f "$OMARCHY_PATH/config/chromium-flags.conf" "$1"
++  chromium_force_software_video_decode "$1"
+   omarchy-install-chromium-copy-url
+   omarchy-install-chromium-ytdlp
+ }
+diff --git a/bin/omarchy-refresh-chromium b/bin/omarchy-refresh-chromium
+index 368373f4069..bf803ba39c7 100755
+--- a/bin/omarchy-refresh-chromium
++++ b/bin/omarchy-refresh-chromium
+@@ -2,6 +2,8 @@
+ 
+ # omarchy:summary=Refresh the ~/.config/chromium-flags.conf file from the Omarchy defaults.
+ 
++source "$OMARCHY_PATH/install/helpers/chromium-video-decode.sh"
++
+ CONFIG_FILE="$HOME/.config/chromium-flags.conf"
+ INSTALL_GOOGLE_ACCOUNTS=false
+ 
+@@ -15,6 +17,9 @@ fi
+ # Refresh the Chromium configuration
+ omarchy-refresh-config chromium-flags.conf
+ 
++# The refreshed default decodes video in hardware, which is broken on NVIDIA
++chromium_force_software_video_decode "$CONFIG_FILE"
++
+ # Install/refresh the native messaging hosts used by the bundled extensions
+ omarchy-install-chromium-copy-url
+ omarchy-install-chromium-ytdlp
+diff --git a/install/helpers/chromium-video-decode.sh b/install/helpers/chromium-video-decode.sh
+new file mode 100644
+index 00000000000..4a9a9bc0a20
+--- /dev/null
++++ b/install/helpers/chromium-video-decode.sh
+@@ -0,0 +1,38 @@
++# nvidia-vaapi-driver supports Firefox only. On NVIDIA GPUs with GSP firmware
++# Omarchy points LIBVA_DRIVER_NAME at it for the whole session
++# (default/hypr/nvidia.lua), so Chromium-family browsers try to decode video
++# through a driver that does not support them: the decoded frames fail dmabuf
++# import (eglCreateImage, EGL_BAD_MATCH) and video renders black while the audio
++# track plays on. NVIDIA has no other hardware decode path in Chromium on Linux,
++# so software decode gives up nothing that was working.
++
++CHROMIUM_SOFTWARE_VIDEO_DECODE_FLAG="--disable-accelerated-video-decode"
++
++CHROMIUM_FLAGS_FILES=(
++  "$HOME/.config/chromium-flags.conf"
++  "$HOME/.config/chrome-flags.conf"
++  "$HOME/.config/microsoft-edge-stable-flags.conf"
++  "$HOME/.config/brave-flags.conf"
++  "$HOME/.config/brave-origin-flags.conf"
++)
++
++chromium_needs_software_video_decode() {
++  omarchy-hw-nvidia-gsp
++}
++
++# Appends the flag to the flags files given, or to every Chromium-family flags
++# file Omarchy seeds. Idempotent, and silent on machines that decode fine.
++chromium_force_software_video_decode() {
++  local conf
++  local -a confs=("$@")
++
++  (( ${#confs[@]} )) || confs=("${CHROMIUM_FLAGS_FILES[@]}")
++
++  chromium_needs_software_video_decode || return 0
++
++  for conf in "${confs[@]}"; do
++    [[ -f $conf ]] || continue
++    grep -qxF -- "$CHROMIUM_SOFTWARE_VIDEO_DECODE_FLAG" "$conf" && continue
++    echo "$CHROMIUM_SOFTWARE_VIDEO_DECODE_FLAG" >>"$conf"
++  done
++}
+diff --git a/install/user/all.sh b/install/user/all.sh
+index 39d98ea57f4..941ccbedde0 100644
+--- a/install/user/all.sh
++++ b/install/user/all.sh
+@@ -9,6 +9,7 @@ run_logged "$OMARCHY_INSTALL/user/hardware/asus/fix-mic.sh"
+ run_logged "$OMARCHY_INSTALL/user/hardware/framework/fix-f13-amd-audio-input.sh"
+ run_logged "$OMARCHY_INSTALL/user/hardware/dell/xps13-text-scaling.sh"
+ run_logged "$OMARCHY_INSTALL/user/hardware/fix-nouveau-cursor.sh"
++run_logged "$OMARCHY_INSTALL/user/hardware/fix-nvidia-chromium-video.sh"
+ 
+ run_logged "$OMARCHY_INSTALL/user/default-keyring.sh"
+ run_logged "$OMARCHY_INSTALL/user/mise.sh"
+diff --git a/install/user/hardware/fix-nvidia-chromium-video.sh b/install/user/hardware/fix-nvidia-chromium-video.sh
+new file mode 100644
+index 00000000000..b27b1ef209b
+--- /dev/null
++++ b/install/user/hardware/fix-nvidia-chromium-video.sh
+@@ -0,0 +1,9 @@
++# Chromium-family browsers render video black on NVIDIA GPUs with GSP firmware,
++# because the VA-API driver Omarchy points them at only supports Firefox. Force
++# software decode in the flags files this user already has.
++source "$OMARCHY_INSTALL/helpers/chromium-video-decode.sh"
++
++if chromium_needs_software_video_decode; then
++  echo "Detected NVIDIA GPU with GSP firmware. Forcing software video decode in Chromium-family browsers."
++  chromium_force_software_video_decode
++fi
+diff --git a/migrations/1789847589.sh b/migrations/1789847589.sh
+new file mode 100644
+index 00000000000..2d5fdb6fa44
+--- /dev/null
++++ b/migrations/1789847589.sh
+@@ -0,0 +1,5 @@
++echo "Force software video decode in Chromium-family browsers on NVIDIA"
++
++source "$OMARCHY_PATH/install/helpers/chromium-video-decode.sh"
++
++chromium_force_software_video_decode
+diff --git a/test/shell.d/chromium-video-decode-test.sh b/test/shell.d/chromium-video-decode-test.sh
+new file mode 100755
+index 00000000000..211f9ee4e00
+--- /dev/null
++++ b/test/shell.d/chromium-video-decode-test.sh
+@@ -0,0 +1,103 @@
++#!/bin/bash
++
++set -euo pipefail
++
++source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
++
++TMPDIR=""
++
++export PATH="$ROOT/bin:$PATH"
++
++cleanup() {
++  if [[ -n $TMPDIR && -d $TMPDIR ]]; then
++    rm -rf "$TMPDIR"
++  fi
++}
++trap cleanup EXIT
++
++TMPDIR=$(mktemp -d)
++
++# A GSP card (Turing or newer) is the one Omarchy points at nvidia-vaapi-driver;
++# anything below 0x1e00 takes the other branch and keeps hardware decode.
++fake_gpu() {
++  local name="$1" device="$2"
++  local dir="$TMPDIR/pci-$name/0000:01:00.0"
++
++  mkdir -p "$dir"
++  echo "0x10de" > "$dir/vendor"
++  echo "0x030000" > "$dir/class"
++  echo "$device" > "$dir/device"
++  printf '%s\n' "$TMPDIR/pci-$name"
++}
++
++gsp_devices=$(fake_gpu gsp 0x2206)
++pre_gsp_devices=$(fake_gpu pre-gsp 0x1380)
++no_gpu_devices="$TMPDIR/pci-empty"
++mkdir -p "$no_gpu_devices"
++
++flags_for() {
++  local name="$1"
++  local home="$TMPDIR/home-$name"
++
++  mkdir -p "$home/.config"
++  cp "$ROOT/config/chromium-flags.conf" "$home/.config/chromium-flags.conf"
++  printf '%s\n' "$home"
++}
++
++force_decode() {
++  local home="$1" devices="$2"
++  shift 2
++
++  HOME="$home" OMARCHY_PCI_DEVICES_PATH="$devices" bash -c '
++    source "$1/install/helpers/chromium-video-decode.sh"
++    chromium_force_software_video_decode "${@:2}"
++  ' bash "$ROOT" "$@"
++}
++
++flag="--disable-accelerated-video-decode"
++
++home=$(flags_for gsp)
++force_decode "$home" "$gsp_devices"
++grep -qxF -- "$flag" "$home/.config/chromium-flags.conf" ||
++  fail "software decode is forced on an NVIDIA GPU with GSP firmware"
++pass "software decode is forced on an NVIDIA GPU with GSP firmware"
++
++force_decode "$home" "$gsp_devices"
++(( $(grep -cxF -- "$flag" "$home/.config/chromium-flags.conf") == 1 )) ||
++  fail "running twice appends the flag once"
++pass "running twice appends the flag once"
++
++home=$(flags_for pre-gsp)
++force_decode "$home" "$pre_gsp_devices"
++if grep -qxF -- "$flag" "$home/.config/chromium-flags.conf"; then
++  fail "a pre-Turing NVIDIA GPU keeps hardware decode"
++fi
++pass "a pre-Turing NVIDIA GPU keeps hardware decode"
++
++home=$(flags_for none)
++force_decode "$home" "$no_gpu_devices"
++if grep -qxF -- "$flag" "$home/.config/chromium-flags.conf"; then
++  fail "a machine without an NVIDIA GPU keeps hardware decode"
++fi
++pass "a machine without an NVIDIA GPU keeps hardware decode"
++
++home=$(flags_for brave)
++cp "$ROOT/config/chromium-flags.conf" "$home/.config/brave-flags.conf"
++force_decode "$home" "$gsp_devices"
++grep -qxF -- "$flag" "$home/.config/brave-flags.conf" ||
++  fail "every Chromium-family flags file the user has is covered"
++pass "every Chromium-family flags file the user has is covered"
++
++home=$(flags_for single)
++force_decode "$home" "$gsp_devices" "$home/.config/chromium-flags.conf"
++grep -qxF -- "$flag" "$home/.config/chromium-flags.conf" ||
++  fail "a named flags file is written"
++pass "a named flags file is written"
++
++home=$(flags_for missing)
++rm "$home/.config/chromium-flags.conf"
++force_decode "$home" "$gsp_devices"
++if [[ -f $home/.config/chromium-flags.conf ]]; then
++  fail "a flags file the user does not have is not created"
++fi
++pass "a flags file the user does not have is not created"
+diff --git a/test/shell.d/default-apps-test.sh b/test/shell.d/default-apps-test.sh
+index 8151c250fd2..8aeb4863db9 100755
+--- a/test/shell.d/default-apps-test.sh
++++ b/test/shell.d/default-apps-test.sh
+@@ -137,6 +137,14 @@ export OMARCHY_TEST_NOTIFICATION_LOG="$notification_log"
+ export OMARCHY_TEST_SETUP_LOG="$setup_log"
+ export OMARCHY_TEST_BROWSER_FILE="$browser_file"
+ 
++# The browser installer forces software video decode on NVIDIA GPUs with GSP
++# firmware, so the flags file it writes depends on the machine running the test.
++# Point the detector at an empty PCI tree to keep that out of the way, and give
++# the quirk its own case below.
++pci_devices="$test_tmp/pci-devices"
++mkdir -p "$pci_devices"
++export OMARCHY_PCI_DEVICES_PATH="$pci_devices"
++
+ assert_missing_opens_installer() {
+   local type=$1
+   local selection=$2
+@@ -227,6 +235,20 @@ grep -Fxq 'omarchy-theme-set-browser:' "$setup_log" ||
+   fail "Chromium browser installer applies the current theme"
+ pass "Chromium browser installer restores the complete Omarchy setup"
+ 
++# Video renders black in Chromium when the NVIDIA VA-API driver is in play, so
++# the installer turns hardware decode off for that hardware only.
++rm -f "$installed_dir/chromium" "$test_home/.config/chromium-flags.conf"
++gsp_gpu="$test_tmp/pci-gsp/0000:01:00.0"
++mkdir -p "$gsp_gpu"
++echo "0x10de" >"$gsp_gpu/vendor"
++echo "0x030000" >"$gsp_gpu/class"
++echo "0x2206" >"$gsp_gpu/device"
++OMARCHY_PCI_DEVICES_PATH="$test_tmp/pci-gsp" OMARCHY_TEST_REAL_BROWSER_INSTALL=true \
++  omarchy-default-browser --install chromium >/dev/null
++grep -qxF -- "--disable-accelerated-video-decode" "$test_home/.config/chromium-flags.conf" ||
++  fail "Chromium browser installer forces software video decode on NVIDIA GPUs with GSP firmware"
++pass "Chromium browser installer forces software video decode on NVIDIA GPUs with GSP firmware"
++
+ : >"$install_log"
+ : >"$setup_log"
+ rm -f "$installed_dir/firefox"
